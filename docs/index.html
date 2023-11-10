@@ -1,12 +1,15 @@
+<!DOCTYPE html>
 <html>
 
 <head>
+    <title>Hitster Webapp</title>
     <script src="dependencies/idb/umd.js"></script>
     <script src="dependencies/jszip/jszip.min.js"></script>
 </head>
 
 <body>
     <button onclick="askForFile(handleZipFile, '.zip')">Upload</button>
+    <label id="load-text" for="load-progress" class="overlay-content"></label>
     <progress id="load-progress" max="100" value="0"></progress>
     <select id="files">
     </select>
@@ -17,193 +20,15 @@
     <script>
         var GLOBAL = {
             files: null,
+            player: document.getElementById("player"),
         }
     </script>
+    <script src="db.js"></script>
+    <script src="player.js"></script>
+    <script src="upload.js"></script>
+    <script src="ui.js"></script>
     <script>
-        function askForFile(callback, accept) {
-            let input = document.createElement("input");
-            input.type = "file";
-            input.onchange = callback;
-            input.accept = accept;
-            input.click();
-        }
-
-        function handleZipFile(event) {
-            console.debug("Got Zip File");
-            let files = event.target.files;
-            let promises = [];
-            let start = new Date();
-            for (let i = 0; i < files.length; i++) {
-                let file = files[i];
-                console.debug(`Loading Zip ${file.name}`);
-                promises.push(loadFromZip(file));
-            }
-
-            Promise.all(promises).then(() => {
-                // info at the end of load
-                let txt = `Loaded Zip in ${(new Date() - start) / 1000} seconds. Refreshing site.`;
-                console.log(txt);
-                /*alert(txt);
-                if (!Global.DEBUG.enabled)
-                    window.location.reload();*/
-            });
-        }
-
-        let start = new Date();
-
-        function setProgressBar(text, val) {
-            console.debug(`${text} (${(new Date() - start) / 1000} seconds)`);
-            let progress = document.getElementById("load-progress");
-            //let loadText = document.getElementById("load-text");
-            //loadText.textContent = text;
-            progress.value = val;
-            //TODO: set text
-        }
-
-        async function loadFromZip(f) {
-            //TODO: JSZip doesn't support windows style paths (\\)
-            //TODO: warn user cause deleting
-            start = new Date();
-            setProgressBar("Opening file...", 0);
-            return JSZip.loadAsync(f)
-                .then(async (zip) => {
-                    console.debug(zip);
-                    promises = [];
-                    files = [];
-
-                    // Load map
-                    setProgressBar("Loading files...", 10);
-                    clearDB();
-
-                    function fileRead(path, entry) {
-                        if (entry.dir)
-                            return;
-
-                        if (!entry.name.endsWith(".mp3"))
-                            return;
-
-                        let name = entry.name.replace(/\.[^/.]+$/, "");
-
-                        let promise = entry.async("blob").then(blob => {
-                            files.push(createFileDBObj(name, blob));
-                        });
-                        promises.push(promise);
-                    }
-                    zip.forEach(fileRead);
-
-                    await Promise.all(promises);
-                    // save files in one transaction
-                    setProgressBar("Saving files to db...", 60);
-                    let tx = await openDBTransaction();
-                    let store = tx.store;
-                    files.forEach((f) => {
-                        store.put(f);
-                    });
-                    tx.commit();
-                    setProgressBar(`Waiting for transaction...`, 70);
-                    await tx.done;
-                    setProgressBar(`Done.`, 100);
-                });
-        }
-
-        const fileStoreName = "fileStore";
-        const fileDBName = "hitster.files";
-        let fileDbPromise = null;
-
-        function openFilesDataBase() {
-            if (fileDbPromise) {
-                return fileDbPromise;
-            }
-            fileDbPromise = idb.openDB(fileDBName, 1, {
-                upgrade(db, oldVersion) {
-                    if (oldVersion < 1) {
-                        const tileStore = db.createObjectStore(fileStoreName, {
-                            keyPath: 'key',
-                        });
-                    }
-                },
-            });
-            return fileDbPromise;
-        }
-        async function openDBTransaction() {
-            return (await openFilesDataBase()).transaction(fileStoreName, "readwrite");
-        }
-
-        function createFileDBObj(name, blob) {
-            let info = createFileDBInfo(name);
-            return {
-                blob,
-                ...info,
-            };
-        }
-
-        function createFileDBInfo(name) {
-            info = {
-                key: name,
-                createdAt: Date.now()
-            };
-            return info;
-        }
-
-        async function clearDB() {
-            return (await openFilesDataBase()).clear(fileStoreName);
-        }
-    </script>
-    <script>
-        async function refreshFiles() {
-            const db = await openFilesDataBase();
-            let files = await db.getAll(fileStoreName);
-            GLOBAL.files = files;
-            return GLOBAL.files;
-        }
-
-        async function loadFiles() {
-            var files = GLOBAL.files;
-            var select = document.getElementById("files");
-            select.innerHTML = "";
-            for (let i in files) {
-                let val = files[i];
-                //console.debug(val);
-                select.append(new Option(val.key,val.key));
-            }
-        }
         refreshFiles().then(loadFiles);
-    </script>
-    <script>
-        function getFile(file)
-        {
-            for (let i in GLOBAL.files)
-            {
-                let val = GLOBAL.files[i];
-                if (val.key == file)
-                    return val;
-            }
-            return null;
-        }
-        function loadFile(fileName)
-        {
-            var file = getFile(fileName);
-            var url = window.URL.createObjectURL(file.blob);
-            var audio = document.getElementById("player");
-            audio.src = url;
-        }
-        function load()
-        {
-            var select = document.getElementById("files");
-            var current = select.options[select.selectedIndex].value;
-            console.debug(`Loading ${current}`);
-            loadFile(current);
-        }
-        function play()
-        {
-            var audio = document.getElementById("player");
-            audio.play();
-        }
-        function stop()
-        {
-            var audio = document.getElementById("player");
-            audio.pause();
-        }
     </script>
 </body>
 
