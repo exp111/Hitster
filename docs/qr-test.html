@@ -1,0 +1,30 @@
+<html>
+
+<head>
+    <script src="dependencies/qrscan/qr-scanner.umd.min.js"></script>
+</head>
+
+<body>
+    <video id="video"></video>
+    <button onclick="scan()">scan</button>
+    <div id="output"></div>
+    <script>
+        function scan() {
+            let v = document.getElementById("video");
+            let out = document.getElementById("output");
+            const qrScanner = new QrScanner(
+                v,
+                result => {
+                    console.log('decoded qr code:', result);
+                    out.textContent = result;
+                }, {
+                    /* your options or returnDetailedScanResult: true if you're not specifying any other options */
+                },
+            );
+            //INFO: does ONLY work over https, use https-server.py for that
+            qrScanner.start();
+        }
+    </script>
+</body>
+
+</html>
